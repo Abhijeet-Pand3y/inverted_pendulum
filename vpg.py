@@ -49,13 +49,13 @@ def reinforce_signal(policy, states, actions, rewards_to_go, avg_rwd, use_avg=Fa
     """Vanilla policy-gradient loss weighted by reward-to-go."""
     # TODO: compute  -E[ (R_to_go - baseline?) * log pi(a | s) ]
     log_probs = _log_prob(policy, states, actions)
-    
+
     if use_avg:
         b = avg_rwd
     else:
         b = 0
 
-    L = log_probs * (rewards_to_go-b)
+    L = log_probs * (rewards_to_go - b)
 
     return -L.mean()
 
@@ -98,29 +98,58 @@ def train_vpg(
         # TODO: 1) roll out to fill a buffer (use collect_data under th.no_grad)
         #       2) buffer.calc_reward_to_go()
         with th.no_grad():
-            buffer, avg_rwd = collect_data(state_dim, env, policy)  # TODO
+            buffer, avg_rwd = collect_data(episodes * episode_len, env, policy)
         
-        buffer.calc_reward_to_go()
+        buffer.calc_reward_to_go(gamma=gamma)
 
         for i in range(updates):
             # TODO: You need to sample from the buffer here
-            s = buffer.sample(batch_size)
+            s, a, r, ns, d, rtg, nrtg = buffer.sample(batch_size)
             
             # TODO: After sampling you need to convert numpy arrays to tensors, Example: "s_t = th.as_tensor(s, dtype=th.float32)"
             
             s_t = th.as_tensor(s, dtype=th.float32)
+            a_t = th.as_tensor(a, dtype=th.float32)
+            r_t = th.as_tensor(r, dtype=th.float32)
+            rtg_t = th.as_tensor(rtg, dtype=th.float32)
+
+            amin = env.action_space.low[0]
+            amax = env.action_space.high[0]
+            a_t = 2 * (a_t - amin) / (amax - amin) - 1
 
             optimizer.zero_grad()
 
             # TODO: compute loss here
-            loss = 
+            if use_rwds:
+                loss = reinforce_rwd_signal(policy, s_t, a_t, r_t)
+            else:
+                loss = reinforce_signal(policy, s_t, a_t, rtg_t, avg_rwd, use_avg)
 
             loss.backward()
             optimizer.step()
 
         # TODO: record the epoch's avg episodic return for the learning curve.
+        ep_returns = []
+        ep_return = 0.0
+        discount = 1.0
+
+        for i in range(buffer.max_i):
+            ep_return += discount * buffer.rewards[i, 0]
+            discount *= gamma
+
+            if buffer.dones[i, 0]:
+                ep_returns.append(ep_return)
+                ep_return = 0.0
+                discount = 1.0
+
+        if len(ep_returns) > 0:
+            returns_per_epoch.append(np.mean(ep_returns))
+        else:
+            returns_per_epoch.append(ep_return)
 
     # TODO: return (policy, list_of_per_epoch_returns).
+    env.close()
+    return policy, returns_per_epoch
 
 
 if __name__ == "__main__":

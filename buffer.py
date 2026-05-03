@@ -53,17 +53,20 @@ class Buffer:
             self.actions[idxs],
             self.rewards[idxs],
             self.states[next_idxs],
-            self.dones[next_idxs],
+            self.dones[idxs],
             self.ret_to_go[idxs],
             self.ret_to_go[next_idxs],
         )
 
     def calc_reward_to_go(self, gamma=0.975):
-        for i in range(self.max_i-1,-1,-1):
-            if self.dones[i]:
-                self.ret_to_go[i] = self.rewards[i]
-            else:
-                self.ret_to_go[i] = self.rewards[i] + gamma * self.ret_to_go[i+1] 
+        running_return = 0.0
+
+        for i in range(self.max_i - 1, -1, -1):
+            if self.dones[i, 0]:
+                running_return = 0.0
+
+            running_return = self.rewards[i, 0] + gamma * running_return
+            self.ret_to_go[i, 0] = running_return
 
 
 
@@ -98,13 +101,15 @@ def collect_data(size, env, agent, title="collecting"):
 
 def act(policy, state, amin, amax):
     """Sample a continuous action a ~ N(mu(state), sigma) from the policy."""
-    state_tensor = th.as_tensor(state, dtype=th.float32).unsqueeze(0)
-    mu, sigma = policy(state_tensor)
-    action = Normal(mu, sigma).sample()
+    with th.no_grad():
+        state_tensor = th.as_tensor(state, dtype=th.float32).unsqueeze(0)
+        mu, sigma = policy(state_tensor)
+        action = Normal(mu, sigma).sample()
 
-    rescaled_action = rescale_actions(action, amin, amax)
+        action = th.tanh(action)
+        rescaled_action = rescale_actions(action, amin, amax)
 
-    return np.array(rescaled_action.flatten())
+    return rescaled_action.flatten().cpu().numpy()
     
 
 
