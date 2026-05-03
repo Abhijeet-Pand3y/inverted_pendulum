@@ -3,3 +3,5 @@ torch
 gymnasium
 matplotlib
 imageio
+gymnasium[classic_control]
+imageio[ffmpeg]

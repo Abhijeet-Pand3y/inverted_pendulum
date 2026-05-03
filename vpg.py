@@ -113,6 +113,8 @@ def train_vpg(
             r_t = th.as_tensor(r, dtype=th.float32)
             rtg_t = th.as_tensor(rtg, dtype=th.float32)
 
+            rtg_t = (rtg_t - rtg_t.mean()) / (rtg_t.std() + 1e-8)
+
             amin = env.action_space.low[0]
             amax = env.action_space.high[0]
             a_t = 2 * (a_t - amin) / (amax - amin) - 1
