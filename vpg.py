@@ -97,30 +97,43 @@ def train_vpg(
     for x in range(epochs):
         # TODO: 1) roll out to fill a buffer (use collect_data under th.no_grad)
         #       2) buffer.calc_reward_to_go()
+
+
+
         with th.no_grad():
-            buffer, avg_rwd = collect_data(state_dim, env, policy)  # TODO
+            buffer, avg_rwd = collect_data(episodes * episode_len, env, policy)  # TODO
         
-        buffer.calc_reward_to_go()
+        buffer.calc_reward_to_go(gamma)
 
         for i in range(updates):
             # TODO: You need to sample from the buffer here
-            s = buffer.sample(batch_size)
-            
+
+            states, actions, rewards, next_states, dones, rtg, next_rtg = buffer.sample(batch_size)
+
             # TODO: After sampling you need to convert numpy arrays to tensors, Example: "s_t = th.as_tensor(s, dtype=th.float32)"
             
-            s_t = th.as_tensor(s, dtype=th.float32)
+            states = th.as_tensor(states, dtype=th.float32)
+            actions = th.as_tensor(actions, dtype=th.float32)
+            rewards = th.as_tensor(rewards, dtype=th.float32)
+            rtg = th.as_tensor(rtg, dtype=th.float32)
 
             optimizer.zero_grad()
 
             # TODO: compute loss here
-            loss = 
+            if use_rwds:
+                loss = reinforce_rwd_signal(policy, states, actions, rewards)
+            else:
+                loss = reinforce_signal(policy, states, actions, rtg, avg_rwd, use_avg)
 
             loss.backward()
             optimizer.step()
 
         # TODO: record the epoch's avg episodic return for the learning curve.
+        ep_return = avg_rwd * episode_len
+        returns_per_epoch.append(ep_return)
 
     # TODO: return (policy, list_of_per_epoch_returns).
+    return policy, returns_per_epoch
 
 
 if __name__ == "__main__":

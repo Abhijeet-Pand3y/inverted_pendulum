@@ -46,13 +46,25 @@ def compute_gae(rewards, values, next_values, dones, gamma=0.975, lam=0.95):
         delta_t = r_t + gamma * V(s_{t+1}) * (1 - done_t) - V(s_t)
         A_t     = delta_t + gamma * lam * (1 - done_t) * A_{t+1}
     """
-    pass
+    delta_t = rewards + gamma * next_values * (1 -  dones) - values
+    a_t = np.zeros_like(delta_t)
+    curr_adv = 0
+    for i in range(len(delta_t)-1, -1, -1):
+        curr_adv = delta_t[i] + gamma * lam * (1-dones[i]) * curr_adv
+        a_t[i] = curr_adv
+
+    return a_t
 
 
 def reinforce_adv_signal(policy, states, actions, advantages):
     """Policy-gradient loss weighted by arbitrary advantages (e.g. GAE)."""
     # TODO: compute  -E[ A_t * log pi(a | s) ].
-    pass
+    log_prob = _log_prob(policy, states, actions)
+    L = advantages * log_prob
+    return -L.mean()
+
+def critic_loss(critic, states, rwd_to_go):
+    return mse_loss(critic(states), rwd_to_go)
 
 
 def train_advantage_vpg(
@@ -94,6 +106,7 @@ def train_advantage_vpg(
             )
 
         # TODO: fill buffer.ret_to_go using buffer.calc_reward_to_go(gamma).
+        buffer.calc_reward_to_go(gamma=gamma)
 
         # --- train the critic ---
         # Regress V(s) toward the reward-to-go targets for critic_updates steps.
@@ -102,19 +115,27 @@ def train_advantage_vpg(
             states_t = th.as_tensor(states, dtype=th.float32)
             rtg_t    = th.as_tensor(rtg,    dtype=th.float32)
             cr_optimizer.zero_grad()
+
+            loss = critic_loss(critic, states_t, rtg_t)
             # TODO: compute mse_loss between critic(states_t) and rtg_t,
             #       then call .backward() and cr_optimizer.step().
+            loss.backward()
+            cr_optimizer.step()
 
         # --- compute GAE advantages ---
         # Run the critic (no gradients) on every stored state.
         all_states = th.as_tensor(buffer.states[: buffer.max_i], dtype=th.float32)
         with th.no_grad():
-            values = critic(all_states).numpy()          # V(s_t)
+            values = critic(all_states).numpy()   
+                   # V(s_t)
         next_values = np.zeros_like(values)
         next_values[:-1] = values[1:]                    # V(s_{t+1}), 0 at episode end
-
+        rewards = buffer.rewards[: buffer.max_i]
+        dones = buffer.dones[: buffer.max_i]
+        
         # TODO: call compute_gae(...) to get an (N, 1) array of advantages.
-        advantages = None  # TODO
+        
+        advantages = compute_gae(rewards, values, next_values, dones)
 
         # Normalise for training stability (provided).
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -128,6 +149,11 @@ def train_advantage_vpg(
             optimizer.zero_grad()
             # TODO: call reinforce_adv_signal(...) to get the loss,
             #       then call .backward() and optimizer.step().
+
+            loss = reinforce_adv_signal(policy, states_t, actions_t, adv_t)
+
+            loss.backward()
+            optimizer.step()
 
         ep_return = avg_rwd * episode_len
         returns_per_epoch.append(ep_return)

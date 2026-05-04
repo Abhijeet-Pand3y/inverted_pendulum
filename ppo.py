@@ -12,7 +12,7 @@ import gymnasium as gym
 
 from buffer import Buffer, collect_data, act, rescale_actions
 from vpg import _log_prob, build_actor
-from gae import build_critic, compute_gae
+from gae import build_critic, compute_gae, critic_loss
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,15 @@ def ppo_surrogate_loss(
     Returns the *negative* of the objective so that optimizer.step()
     performs gradient ascent on the expected return.
     """
-    pass
+    r_theta = th.exp(_log_prob(policy, states, actions) - old_log_probs)
+
+    
+    if (not clip):  #unclipped
+        L = r_theta * advantages
+    else:  #clipped
+        L = th.min(r_theta * advantages, th.clamp(r_theta, 1 - eps_clip, 1 + eps_clip) * advantages)
+
+    return -L.mean()
 
 
 def ppo_total_loss(
@@ -70,7 +78,18 @@ def ppo_total_loss(
     where L_VF = ( V_theta(s) - R_t )^2  and  S[pi] is the policy entropy.
     Returns a scalar tensor to be minimised.
     """
-    pass
+    L_surr = ppo_surrogate_loss(policy, states, actions, advantages, old_log_probs, eps_clip, clip)
+
+    mu, sigma = policy(states)
+
+    v_theta = critic(states)
+    L_VF = mse_loss(v_theta, returns)
+
+    s_pi = Normal(mu, sigma).entropy().mean()
+
+    L_total = L_surr + c1 * L_VF - c2 * s_pi
+
+    return L_total
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +141,70 @@ def train_ppo(
         #          collected data and minimise ppo_total_loss(...).
         #       5) log per-iteration episodic return and total loss for the
         #          required learning / loss curve plots.
-        pass
+        with th.no_grad():
+            buffer, avg_rwd = collect_data(
+                steps_per_iter, env, policy, title=f"ppo"
+            )
+
+        buffer.calc_reward_to_go()
+
+        all_states_t = th.as_tensor(buffer.states[: buffer.max_i], dtype=th.float32)
+        all_actions_t = th.as_tensor(buffer.actions[: buffer.max_i], dtype=th.float32)
+        with th.no_grad():
+            values = critic(all_states_t).numpy()   
+                # V(s_t)
+        next_values = np.zeros_like(values)
+        next_values[:-1] = values[1:]                    # V(s_{t+1}), 0 at episode end
+        all_rewards = buffer.rewards[: buffer.max_i]
+        all_dones = buffer.dones[: buffer.max_i]
+
+        advantages = compute_gae(all_rewards, values, next_values, all_dones, gamma, lam)
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        all_advantages_t = th.as_tensor(advantages, dtype=th.float32)
+
+
+        old_log_probs = _log_prob(policy=policy, states=all_states_t, actions=all_actions_t).detach()
+        
+        all_returns_t = th.as_tensor(advantages + values, dtype=th.float32)
+        iter_loss = []
+        for _ in range(sgd_epochs):
+
+            idxs = np.random.randint(0, buffer.max_i, size=minibatch_size)
+            states_t    = all_states_t[idxs]
+            actions_t   = all_actions_t[idxs]
+            adv_t       = all_advantages_t[idxs]
+            returns_t   = all_returns_t[idxs]
+            old_lp_t    = old_log_probs[idxs]
+
+            cr_optimizer.zero_grad()
+            optimizer.zero_grad()
+
+
+            ppo_loss = ppo_total_loss(
+                policy=policy, 
+                critic=critic, 
+                states=states_t, 
+                actions=actions_t, 
+                advantages=adv_t,
+                returns=returns_t,
+                old_log_probs=old_lp_t,
+            )
+            iter_loss.append(ppo_loss.item())
+            
+            ppo_loss.backward()
+            optimizer.step()
+            cr_optimizer.step()
+
+        returns_per_iter.append(avg_rwd * episode_len)
+        losses_per_iter.append(np.mean(iter_loss))
+    
+    return policy, returns_per_iter, losses_per_iter
+        
+
+
+
+
 
     # TODO: return policy, list_of_returns, list_of_losses
 
@@ -132,16 +214,16 @@ if __name__ == "__main__":
     from video import record_video, generate_strobe
 
     # --- Task 4: clipped vs unclipped ---
-    _, ret_clip,   loss_clip   = train_ppo(iterations=50, clip=True)
-    _, ret_noclip, loss_noclip = train_ppo(iterations=50, clip=False)
-    plot_learning_curves(
-        {"clipped": ret_clip, "unclipped": ret_noclip},
-        title="Task 4: PPO clipped vs unclipped",
-    )
-    plot_loss_curves(
-        {"clipped": loss_clip, "unclipped": loss_noclip},
-        title="Task 4: PPO loss curves",
-    )
+    # _, ret_clip,   loss_clip   = train_ppo(iterations=50, clip=True)
+    # _, ret_noclip, loss_noclip = train_ppo(iterations=50, clip=False)
+    # plot_learning_curves(
+    #     {"clipped": ret_clip, "unclipped": ret_noclip},
+    #     title="Task 4: PPO clipped vs unclipped",
+    # )
+    # plot_loss_curves(
+    #     {"clipped": loss_clip, "unclipped": loss_noclip},
+    #     title="Task 4: PPO loss curves",
+    # )
 
     # --- Task 5: full PPO ---
     policy, ret_ppo, loss_ppo = train_ppo(iterations=500)

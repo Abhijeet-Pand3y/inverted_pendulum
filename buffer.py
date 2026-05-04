@@ -60,7 +60,7 @@ class Buffer:
 
     def calc_reward_to_go(self, gamma=0.975):
         for i in range(self.max_i-1,-1,-1):
-            if self.dones[i]:
+            if self.dones[i] or i == self.max_i-1:
                 self.ret_to_go[i] = self.rewards[i]
             else:
                 self.ret_to_go[i] = self.rewards[i] + gamma * self.ret_to_go[i+1] 
@@ -101,6 +101,7 @@ def act(policy, state, amin, amax):
     state_tensor = th.as_tensor(state, dtype=th.float32).unsqueeze(0)
     mu, sigma = policy(state_tensor)
     action = Normal(mu, sigma).sample()
+    action = th.clamp(action, -1, 1)
 
     rescaled_action = rescale_actions(action, amin, amax)
 
