@@ -45,13 +45,13 @@ Compares rewards-to-go vs GAE learning curves.
 ```bash
 python ppo.py
 ```
-Runs clipped vs unclipped PPO (Task 4) and full PPO for 500 iterations (Task 5).
+Runs full PPO for 500 iterations (Task 5). The Task 4 clipped vs unclipped block is included in `ppo.py` and can be uncommented.
 
 ### All Tasks
 ```bash
 python pg.py
 ```
-Runs everything end to end. Comment/uncomment blocks for individual tasks.
+Runs everything end to end; Task 5 uses a learning-rate sweep (1e-4 vs 3e-4). Comment/uncomment blocks for individual tasks.
 
 ---
 
@@ -62,7 +62,7 @@ Runs everything end to end. Comment/uncomment blocks for individual tasks.
 | `gamma` | 0.99 | `train_ppo` |
 | `lam` | 0.95 | `compute_gae` |
 | `eps_clip` | 0.2 | `ppo_surrogate_loss` |
-| `learning_rate` | 3e-4 | `train_ppo` |
+| `learning_rate` | 3e-4 (Task 5 sweep also uses 1e-4) | `train_ppo` |
 | `steps_per_iter` | 2048 | `train_ppo` |
 | `sgd_epochs` | 10 | `train_ppo` |
 | `hidden_size` | 64 | `train_ppo` |

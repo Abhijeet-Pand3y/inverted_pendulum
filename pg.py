@@ -61,11 +61,17 @@ if __name__ == "__main__":
         title="Task 4: PPO loss curves",
     )
 
-    # --- Task 5: full PPO ---
-    policy, ret_ppo, loss_ppo = train_ppo(iterations=500)
-    plot_learning_curves({"PPO": ret_ppo}, title="Task 5: Full PPO")
-    plot_loss_curves({"PPO": loss_ppo}, title="Task 5: Total loss")
-    record_video(policy, path="videos/task5_ppo.mp4")            # optional
-    generate_strobe(policy, path="videos/task5_ppo_strobe.png")  # optional
+    policy_hi, ret_hi, loss_hi = train_ppo(iterations=500, learning_rate=3e-4)
+    policy_lo, ret_lo, loss_lo = train_ppo(iterations=500, learning_rate=1e-4)
+    plot_learning_curves(
+        {"lr=3e-4": ret_hi, "lr=1e-4": ret_lo},
+        title="Task 5: Full PPO (learning-rate sweep)",
+    )
+    plot_loss_curves(
+        {"lr=3e-4": loss_hi, "lr=1e-4": loss_lo},
+        title="Task 5: Total loss (learning-rate sweep)",
+    )
+    record_video(policy_hi, path="videos/task5_ppo.mp4")
+    generate_strobe(policy_hi, path="videos/task5_ppo_strobe.png")
 
     pass

@@ -189,6 +189,10 @@ def train_ppo(
                 advantages=adv_t,
                 returns=returns_t,
                 old_log_probs=old_lp_t,
+                eps_clip=eps_clip,
+                c1=c1,
+                c2=c2,
+                clip=clip,
             )
             iter_loss.append(ppo_loss.item())
             
