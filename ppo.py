@@ -433,7 +433,7 @@ if __name__ == "__main__":
     record_video(policy_base, path="videos/task5_baseline.mp4")
 
     # ---- Extension 1: state-dependent sigma vs fixed ----
-    run with fixed sigma (current NormalModule default)
+    # run with fixed sigma (current NormalModule default)
     _, ret_fixed, loss_fixed = train_ppo(
         iterations=500, learning_rate=1e-5, hidden_size=128,
         minibatch_size=256, steps_per_iter=4096,
@@ -493,7 +493,7 @@ if __name__ == "__main__":
     )
     record_video(policy_par, path="videos/ext3_parallel.mp4")
 
-    ---- Extension 4: LSTM partial state ----
+    # ---- Extension 4: LSTM partial state ----
     _, ret_lstm_partial, loss_lstm_partial = train_ppo_recurrent(
         iterations=1000, steps_per_iter=4096, hidden_size=128,
         learning_rate=3e-4, seq_len=32, sgd_epochs=5,
