@@ -17,11 +17,25 @@ class NormalModule(nn.Module):
     def __init__(self, inp, out):
         super().__init__()
         self.m = nn.Linear(inp, out)
+        # self.log_std = nn.Linear(inp, out)
+        # nn.init.constant_(self.log_std.weight, 0)
+        # nn.init.constant_(self.log_std.bias, -1)  # sigma starts ~0.37
         log_std = -0.5 * np.ones(out, dtype=np.float32)
         self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
 
     def forward(self, inputs):
         mout = self.m(inputs)
-        vout = torch.exp(self.log_std)
+        vout = self.log_std.exp()
+
+        # vout = self.log_std(inputs)
+        # vout = torch.clamp(vout, -20, 2)
+        # vout = torch.exp(vout)
+
         # mu is squashed to (-1, 1); rescale it to the env action range later.
-        return F.tanh(mout), vout
+        mu = F.tanh(mout)
+        
+        return mu, vout
+    
+
+
+
